@@ -1,7 +1,5 @@
 const std = @import("std");
-const mach = @import("libs/mach/build.zig");
 const glfw = @import("libs/mach/libs/glfw/build.zig");
-const zgl = @import("libs/zgl/zgl.zig");
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -33,6 +31,11 @@ pub fn build(b: *std.Build) void {
     exe.addModule("zgl", b.createModule(.{
         .source_file = .{ .path = "libs/zgl/zgl.zig" },
     }));
+
+    exe.addModule("zlm", b.createModule(.{
+        .source_file = .{ .path = "libs/zlm/zlm.zig" },
+    }));
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).

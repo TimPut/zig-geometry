@@ -1,10 +1,10 @@
+const print = @import("std").debug.print;
 const std = @import("std");
 const stl = @import("stl.zig");
-const mach = @import("mach");
-const zm = @import("zmath");
+const Triangle = @import("stl.zig").Triangle;
 const glfw = @import("glfw");
 const gl = @import("zgl");
-
+const math = @import("zlm");
 const log = std.log.scoped(.Engine);
 
 fn glGetProcAddress(p: glfw.GLProc, proc: [:0]const u8) ?*const anyopaque {

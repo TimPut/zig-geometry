@@ -17,7 +17,7 @@ fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
     std.log.err("glfw: {}: {s}\n", .{ error_code, description });
 }
 
-fn setupGlfwContext(allocator: std.mem.Allocator, verts: []f32) !void {
+fn setupGlfwContext(allocator: std.mem.Allocator, verts: []f32, colors: []f32, normals: []f32) !void {
     glfw.setErrorCallback(errorCallback);
     if (!glfw.init(.{})) {
         std.log.err("failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
@@ -57,17 +57,25 @@ fn setupGlfwContext(allocator: std.mem.Allocator, verts: []f32) !void {
     gl.bindBuffer(vbo, gl.BufferTarget.array_buffer);
 
     // Upload the vertex data to the VBO
-    gl.bufferData(gl.BufferTarget.array_buffer, f32, verts, gl.BufferUsage.static_draw);
+    gl.bufferUninitialized(gl.BufferTarget.array_buffer, f32, (verts.len + colors.len + normals.len) * 3 * @sizeOf(f32), gl.BufferUsage.static_draw);
+
+    gl.bufferSubData(gl.BufferTarget.array_buffer, 0, f32, verts);
+    gl.bufferSubData(gl.BufferTarget.array_buffer, verts.len * 3 * @sizeOf(f32), f32, colors);
+    gl.bufferSubData(gl.BufferTarget.array_buffer, (verts.len * 3 + colors.len * 3) * @sizeOf(f32), f32, normals);
+
+    print("{d}\n", .{verts.len});
+    print("{d}\n", .{colors[2031349]});
+    print("{d}\n", .{normals[2031349]});
 
     // Set up the vertex attributes
     // Positions
-    gl.vertexAttribPointer(0, 3, gl.Type.float, false, 9 * @sizeOf(f32), 0);
+    gl.vertexAttribPointer(0, 3, gl.Type.float, false, 3 * @sizeOf(f32), 0);
     gl.enableVertexAttribArray(0);
     // Colors
-    gl.vertexAttribPointer(1, 3, gl.Type.float, false, 9 * @sizeOf(f32), 3 * @sizeOf(f32));
+    gl.vertexAttribPointer(1, 3, gl.Type.float, false, 3 * @sizeOf(f32), verts.len * 3 * @sizeOf(f32));
     gl.enableVertexAttribArray(1);
     // Normals
-    gl.vertexAttribPointer(2, 3, gl.Type.float, false, 9 * @sizeOf(f32), 6 * @sizeOf(f32));
+    gl.vertexAttribPointer(2, 3, gl.Type.float, false, 3 * @sizeOf(f32), (verts.len * 3 + colors.len * 3) * @sizeOf(f32));
     gl.enableVertexAttribArray(2);
 
     // Unbind the VAO and VBO
@@ -111,7 +119,7 @@ fn setupGlfwContext(allocator: std.mem.Allocator, verts: []f32) !void {
     var viewLoc = gl.getUniformLocation(shaderProgram, "view");
     const degree: f32 = 0.0174532925199432957692369076848861271344287188854172545609719144; // pi/180
     var projectionLoc = gl.getUniformLocation(shaderProgram, "projection");
-    var projection = math.Mat4.createPerspective(90.0 * degree, @intToFloat(f32, width) / @intToFloat(f32, height), 1, 10.0);
+    var projection = math.Mat4.createPerspective(90.0 * degree, @intToFloat(f32, width) / @intToFloat(f32, height), 0.001, 10.0);
 
     // gross casting: https://github.com/ziglang/zig/issues/3156
     const projections: []const [4][4]f32 = @ptrCast([*]const [4][4]f32, &projection.fields)[0..1];
@@ -172,7 +180,7 @@ fn setupGlfwContext(allocator: std.mem.Allocator, verts: []f32) !void {
         gl.bindVertexArray(vao);
 
         // Draw the triangle
-        gl.drawArrays(gl.PrimitiveType.triangles, 0, verts.len);
+        gl.drawArrays(gl.PrimitiveType.lines, 0, verts.len);
 
         glfw.pollEvents();
         window.swapBuffers();
@@ -227,7 +235,7 @@ const fragmentShaderSourceRaw =
     \\uniform vec3 lightColor;
     \\uniform vec3 lightPos;
     \\void main() {
-    \\  float ambientStrength = 0.2;
+    \\  float ambientStrength = 0.4;
     \\  vec3 ambient = ambientStrength * lightColor;
     \\
     \\  vec3 norm = normalize(Normal);
@@ -288,7 +296,7 @@ pub fn processInput(window: glfw.Window, state: *State) void {
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var allocator = gpa.backing_allocator;
+    var allocator = gpa.allocator();
 
     // const stdout_handle = std.io.getStdOut().writer();
     // var bw = std.io.bufferedWriter(stdout_handle);
@@ -343,31 +351,34 @@ pub fn main() !void {
 
     // print("maxs: {d},{d},{d}", .{ xupper, yupper, zupper });
     // print("mins: {d},{d},{d}", .{ xlower, ylower, zlower });
-
+    var scale: f32 = @max(zupper - zlower, @max(yupper - ylower, xupper - xlower));
+    var xcenter: f32 = (xupper + xlower) / 2;
+    var ycenter: f32 = (yupper + ylower) / 2;
+    var zcenter: f32 = (zupper + zlower) / 2;
     for (
         stl_model.tris.items(.a),
         stl_model.tris.items(.b),
         stl_model.tris.items(.c),
     ) |*as, *bs, *cs| {
-        as.x += xlower;
-        bs.x += xlower;
-        cs.x += xlower;
-        as.y += ylower;
-        bs.y += ylower;
-        cs.y += ylower;
-        as.z += zlower;
-        bs.z += zlower;
-        cs.z += zlower;
+        as.x -= xcenter;
+        bs.x -= xcenter;
+        cs.x -= xcenter;
+        as.y -= ycenter;
+        bs.y -= ycenter;
+        cs.y -= ycenter;
+        as.z -= zcenter;
+        bs.z -= zcenter;
+        cs.z -= zcenter;
 
-        as.x /= (xupper - xlower) * 2;
-        bs.x /= (xupper - xlower) * 2;
-        cs.x /= (xupper - xlower) * 2;
-        as.y /= (yupper - ylower) * 2;
-        bs.y /= (yupper - ylower) * 2;
-        cs.y /= (yupper - ylower) * 2;
-        as.z /= (zupper - zlower) * 2;
-        bs.z /= (zupper - zlower) * 2;
-        cs.z /= (zupper - zlower) * 2;
+        as.x /= scale;
+        bs.x /= scale;
+        cs.x /= scale;
+        as.y /= scale;
+        bs.y /= scale;
+        cs.y /= scale;
+        as.z /= scale;
+        bs.z /= scale;
+        cs.z /= scale;
     }
 
     // var stl_model_3: stl.Stl = try stl.concat(allocator, stl_model, stl_model_2);
@@ -378,45 +389,93 @@ pub fn main() !void {
     // try stdout.print("Write speed: {d:.2}GB/s\n", .{(@intToFloat(f32, stl_model_3.count * @sizeOf(stl.Triangle)) / (@intToFloat(f32, time) / 1_000_000_000)) / (1000 * 1000 * 1000)});
     // try bw.flush();
 
-    const vertSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3 * 3 * 3);
-    // 3 verts per triangle, 3 coords per vert
-    var i: u32 = 0;
+    const vertSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3 * 3);
+    const colorSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3 * 3);
+    const normalSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3 * 3);
+
     for (
+        0..,
         stl_model.tris.items(.a),
         stl_model.tris.items(.b),
         stl_model.tris.items(.c),
-        stl_model.tris.items(.n),
-    ) |a, b, c, n| {
-        vertSlice[i + 0] = a.x;
-        vertSlice[i + 1] = a.y;
-        vertSlice[i + 2] = a.z;
-        vertSlice[i + 3] = red.x;
-        vertSlice[i + 4] = red.y;
-        vertSlice[i + 5] = red.z;
-        vertSlice[i + 6] = n.x;
-        vertSlice[i + 7] = n.y;
-        vertSlice[i + 8] = n.z;
-        vertSlice[i + 9] = b.x;
-        vertSlice[i + 10] = b.y;
-        vertSlice[i + 11] = b.z;
-        vertSlice[i + 12] = red.x;
-        vertSlice[i + 13] = red.y;
-        vertSlice[i + 14] = red.z;
-        vertSlice[i + 15] = n.x;
-        vertSlice[i + 16] = n.y;
-        vertSlice[i + 17] = n.z;
-        vertSlice[i + 18] = c.x;
-        vertSlice[i + 19] = c.y;
-        vertSlice[i + 20] = c.z;
-        vertSlice[i + 21] = red.x;
-        vertSlice[i + 22] = red.y;
-        vertSlice[i + 23] = red.z;
-        vertSlice[i + 24] = n.x;
-        vertSlice[i + 25] = n.y;
-        vertSlice[i + 26] = n.z;
-
-        i += 27;
+    ) |i, a, b, c| {
+        vertSlice[9 * i + 0] = a.x;
+        vertSlice[9 * i + 1] = a.y;
+        vertSlice[9 * i + 2] = a.z;
+        vertSlice[9 * i + 3] = b.x;
+        vertSlice[9 * i + 4] = b.y;
+        vertSlice[9 * i + 5] = b.z;
+        vertSlice[9 * i + 6] = c.x;
+        vertSlice[9 * i + 7] = c.y;
+        vertSlice[9 * i + 8] = c.z;
     }
+    for (
+        0..stl_model.count * 3,
+    ) |i| {
+        colorSlice[3 * i + 0] = red.x;
+        colorSlice[3 * i + 1] = red.y;
+        colorSlice[3 * i + 2] = red.z;
+    }
+    for (
+        0..,
+        stl_model.tris.items(.n),
+    ) |i, n| {
+        normalSlice[9 * i + 0] = n.x;
+        normalSlice[9 * i + 1] = n.y;
+        normalSlice[9 * i + 2] = n.z;
+        normalSlice[9 * i + 3] = n.x;
+        normalSlice[9 * i + 4] = n.y;
+        normalSlice[9 * i + 5] = n.z;
+        normalSlice[9 * i + 6] = n.x;
+        normalSlice[9 * i + 7] = n.y;
+        normalSlice[9 * i + 8] = n.z;
+    }
+
+    // vertSlice[0..stl_model.count] = stl.model.tris.items.a;
+    // mem.copy(stl.V3, vertSlice[0..stl_model.count], stl_model.tris.items(.a)[0..stl_model.count]);
+
+    // colorSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3);
+    // normalSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3);
+
+    // const vertSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3 * 3 * 3);
+    // // 3 verts per triangle, 3 coords per vert
+
+    // for (
+    //     stl_model.tris.items(.a),
+    //     stl_model.tris.items(.b),
+    //     stl_model.tris.items(.c),
+    //     stl_model.tris.items(.n),
+    // ) |a, b, c, n| {
+    //     vertSlice[i + 0] = a.x;
+    //     vertSlice[i + 1] = a.y;
+    //     vertSlice[i + 2] = a.z;
+    //     vertSlice[i + 3] = red.x;
+    //     vertSlice[i + 4] = red.y;
+    //     vertSlice[i + 5] = red.z;
+    //     vertSlice[i + 6] = n.x;
+    //     vertSlice[i + 7] = n.y;
+    //     vertSlice[i + 8] = n.z;
+    //     vertSlice[i + 9] = b.x;
+    //     vertSlice[i + 10] = b.y;
+    //     vertSlice[i + 11] = b.z;
+    //     vertSlice[i + 12] = red.x;
+    //     vertSlice[i + 13] = red.y;
+    //     vertSlice[i + 14] = red.z;
+    //     vertSlice[i + 15] = n.x;
+    //     vertSlice[i + 16] = n.y;
+    //     vertSlice[i + 17] = n.z;
+    //     vertSlice[i + 18] = c.x;
+    //     vertSlice[i + 19] = c.y;
+    //     vertSlice[i + 20] = c.z;
+    //     vertSlice[i + 21] = red.x;
+    //     vertSlice[i + 22] = red.y;
+    //     vertSlice[i + 23] = red.z;
+    //     vertSlice[i + 24] = n.x;
+    //     vertSlice[i + 25] = n.y;
+    //     vertSlice[i + 26] = n.z;
+
+    //     i += 27;
+    // }
 
     // var vertSlice: []f32 = @constCast(&helloTriangle);
     // var vertSlice: []f32 = std.mem.bytesAsSlice(f32, std.mem.sliceAsBytes(buf));
@@ -424,7 +483,7 @@ pub fn main() !void {
     // print("{d};{d};{d}\n", .{ vertSlice[6 * offset + 0], vertSlice[6 * offset + 1], vertSlice[6 * offset + 2] });
     // print("{d};{d};{d}\n", .{ vertSlice[6], vertSlice[7], vertSlice[8] });
     // print("{d};{d};{d}\n", .{ vertSlice[12], vertSlice[13], vertSlice[14] });
-    try setupGlfwContext(allocator, vertSlice);
+    try setupGlfwContext(allocator, vertSlice, colorSlice, normalSlice);
 }
 
 test "simple test" {

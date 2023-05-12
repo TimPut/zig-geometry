@@ -6,6 +6,7 @@ const glfw = @import("glfw");
 const gl = @import("zgl");
 const math = @import("zlm");
 const log = std.log.scoped(.Engine);
+const log2 = std.log.scoped(std.log.default_log_scope);
 
 fn glGetProcAddress(p: glfw.GLProc, proc: [:0]const u8) ?*const anyopaque {
     _ = p;
@@ -41,6 +42,8 @@ fn setupGlfwContext(allocator: std.mem.Allocator, verts: []f32, colors: []f32, n
     };
     // defer window.destroy();
     glfw.makeContextCurrent(window);
+    // En/Disable VSYNC
+    glfw.swapInterval(1);
     const proc: glfw.GLProc = undefined;
     try gl.loadExtensions(proc, glGetProcAddress);
 
@@ -92,10 +95,10 @@ fn setupGlfwContext(allocator: std.mem.Allocator, verts: []f32, colors: []f32, n
     gl.compileShader(fragmentShader);
 
     var shaderLog = gl.getShaderInfoLog(vertexShader, allocator);
+    log2.debug("{!s}\n", .{shaderLog});
+    var shaderLog2 = gl.getShaderInfoLog(fragmentShader, allocator);
     // var shaderLog2 = gl.getShader(fragmentShader, gl.ShaderParameter.shader_source_length);
-    // print("{any}", .{shaderLog});
-    _ = try shaderLog;
-    // print("{d}", .{shaderLog2});
+    print("{!s}\n", .{shaderLog2});
 
     var shaderProgram: gl.Program = undefined;
     shaderProgram = gl.createProgram();
@@ -154,7 +157,13 @@ fn setupGlfwContext(allocator: std.mem.Allocator, verts: []f32, colors: []f32, n
 
     gl.enable(gl.Capabilities.depth_test);
 
-    while (!window.shouldClose()) {
+    var time: u64 = 0;
+    var timer: std.time.Timer = try std.time.Timer.start();
+    var frame_sum: u64 = 0;
+    var frame_sum_n: u64 = 10;
+
+    var frame_counter: u64 = 0;
+    while (!window.shouldClose()) : (frame_counter += 1) {
         processInput(window, &state);
 
         camera.x = @cos(state.rotation_ca) * @sin(state.rotation_cb) * camera_radius;
@@ -180,10 +189,20 @@ fn setupGlfwContext(allocator: std.mem.Allocator, verts: []f32, colors: []f32, n
         gl.bindVertexArray(vao);
 
         // Draw the triangle
-        gl.drawArrays(gl.PrimitiveType.lines, 0, verts.len);
+        // gl.drawArrays(gl.PrimitiveType.lines, 0, verts.len);
+        gl.drawArrays(gl.PrimitiveType.triangles, 0, verts.len);
 
         glfw.pollEvents();
+
+        time = timer.lap();
+        frame_sum *= frame_sum_n - 1;
+        frame_sum /= frame_sum_n;
+        time /= frame_sum_n;
+        frame_sum += time;
+        print("\rCPU Frametime: {d:.3}ms", .{@intToFloat(f64, frame_sum) / 1_000_000});
+
         window.swapBuffers();
+        time = timer.lap();
     }
 }
 
@@ -304,18 +323,12 @@ pub fn main() !void {
     // try stdout.print("Uses STDOUT\n", .{});
     // try bw.flush();
 
-    var time: u64 = 0;
-    var timer: std.time.Timer = try std.time.Timer.start();
-    time = timer.lap();
-
     var stl_model = try stl.readStl(std.fs.cwd(), allocator, "3DBenchy.stl");
 
     // var stl_model_2 = stl_model;
     // ^ Copies the struct including its fields, but one field is a
-    // point, so we need to deep copy that target of that pointer
+    // pointer, so we need to deep copy that target of that pointer
     // stl_model_2.tris = try stl_model_2.tris.clone(allocator);
-
-    time = timer.lap();
 
     var xlower: f32 = 0;
     var xupper: f32 = 0;
@@ -381,14 +394,6 @@ pub fn main() !void {
         cs.z /= scale;
     }
 
-    // var stl_model_3: stl.Stl = try stl.concat(allocator, stl_model, stl_model_2);
-
-    // try writeStl(std.fs.cwd(), allocator, "output.stl", stl_model_3);
-
-    // time = timer.lap();
-    // try stdout.print("Write speed: {d:.2}GB/s\n", .{(@intToFloat(f32, stl_model_3.count * @sizeOf(stl.Triangle)) / (@intToFloat(f32, time) / 1_000_000_000)) / (1000 * 1000 * 1000)});
-    // try bw.flush();
-
     const vertSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3 * 3);
     const colorSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3 * 3);
     const normalSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3 * 3);
@@ -431,58 +436,6 @@ pub fn main() !void {
         normalSlice[9 * i + 8] = n.z;
     }
 
-    // vertSlice[0..stl_model.count] = stl.model.tris.items.a;
-    // mem.copy(stl.V3, vertSlice[0..stl_model.count], stl_model.tris.items(.a)[0..stl_model.count]);
-
-    // colorSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3);
-    // normalSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3);
-
-    // const vertSlice: []f32 = try allocator.alloc(f32, stl_model.count * 3 * 3 * 3);
-    // // 3 verts per triangle, 3 coords per vert
-
-    // for (
-    //     stl_model.tris.items(.a),
-    //     stl_model.tris.items(.b),
-    //     stl_model.tris.items(.c),
-    //     stl_model.tris.items(.n),
-    // ) |a, b, c, n| {
-    //     vertSlice[i + 0] = a.x;
-    //     vertSlice[i + 1] = a.y;
-    //     vertSlice[i + 2] = a.z;
-    //     vertSlice[i + 3] = red.x;
-    //     vertSlice[i + 4] = red.y;
-    //     vertSlice[i + 5] = red.z;
-    //     vertSlice[i + 6] = n.x;
-    //     vertSlice[i + 7] = n.y;
-    //     vertSlice[i + 8] = n.z;
-    //     vertSlice[i + 9] = b.x;
-    //     vertSlice[i + 10] = b.y;
-    //     vertSlice[i + 11] = b.z;
-    //     vertSlice[i + 12] = red.x;
-    //     vertSlice[i + 13] = red.y;
-    //     vertSlice[i + 14] = red.z;
-    //     vertSlice[i + 15] = n.x;
-    //     vertSlice[i + 16] = n.y;
-    //     vertSlice[i + 17] = n.z;
-    //     vertSlice[i + 18] = c.x;
-    //     vertSlice[i + 19] = c.y;
-    //     vertSlice[i + 20] = c.z;
-    //     vertSlice[i + 21] = red.x;
-    //     vertSlice[i + 22] = red.y;
-    //     vertSlice[i + 23] = red.z;
-    //     vertSlice[i + 24] = n.x;
-    //     vertSlice[i + 25] = n.y;
-    //     vertSlice[i + 26] = n.z;
-
-    //     i += 27;
-    // }
-
-    // var vertSlice: []f32 = @constCast(&helloTriangle);
-    // var vertSlice: []f32 = std.mem.bytesAsSlice(f32, std.mem.sliceAsBytes(buf));
-    // var offset: u64 = 500;
-    // print("{d};{d};{d}\n", .{ vertSlice[6 * offset + 0], vertSlice[6 * offset + 1], vertSlice[6 * offset + 2] });
-    // print("{d};{d};{d}\n", .{ vertSlice[6], vertSlice[7], vertSlice[8] });
-    // print("{d};{d};{d}\n", .{ vertSlice[12], vertSlice[13], vertSlice[14] });
     try setupGlfwContext(allocator, vertSlice, colorSlice, normalSlice);
 }
 

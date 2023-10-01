@@ -1,0 +1,8 @@
+add translate to camera controls
+switch to indexed rendering of vertices
+write integer intrinsic geometry representation
+add logging to shader compilation
+factor out shader compilation
+figure out resize callback
+fix aspect ratio junk
+highlight wireframe mode

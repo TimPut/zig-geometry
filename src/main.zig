@@ -206,6 +206,13 @@ fn setupGlfwContext(allocator: std.mem.Allocator, verts: []f32, colors: []f32, n
     }
 }
 
+const primitiveTetrahedron = [_]f32{
+    @sqrt(8.0) / 3.0,  0.0,               -1.0 / 3.0,
+    @sqrt(2.0) / -3.0, @sqrt(2.0 / 3.0),  -1.0 / 3.0,
+    @sqrt(2.0) / -3.0, -@sqrt(2.0 / 3.0), -1.0 / 3.0,
+    0,                 0,                 1,
+};
+
 const helloTriangle = [_]f32{
     -0.5, -0.5, 0.0, 0.5, 0,   0.0,
     0.5,  -0.5, 0.0, 0.5, 0.5, 0.0,
@@ -256,7 +263,7 @@ const fragmentShaderSourceRaw =
     \\void main() {
     \\  float ambientStrength = 0.4;
     \\  vec3 ambient = ambientStrength * lightColor;
-    \\
+    \\.
     \\  vec3 norm = normalize(Normal);
     \\  vec3 lightDir = normalize(lightPos - vec3(FragPos));
     \\  float diff = max(dot(norm, lightDir), 0.0);
@@ -436,7 +443,8 @@ pub fn main() !void {
         normalSlice[9 * i + 8] = n.z;
     }
 
-    try setupGlfwContext(allocator, vertSlice, colorSlice, normalSlice);
+    // try setupGlfwContext(allocator, vertSlice, colorSlice, normalSlice);
+    print("{any}", .{primitiveTetrahedron});
 }
 
 test "simple test" {
